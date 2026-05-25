@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador de Multiplicadores de Lagrange</title>
+
+<!-- math.js para parseo, derivadas simbólicas y evaluación -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/12.4.2/math.min.js"></script>
+<!-- Plotly.js para gráficos 3D y curvas de nivel -->
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<!-- KaTeX para renderizar las fórmulas en la interfaz -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"
+        onload="renderMathInElement(document.body,{delimiters:[{left:'$$',right:'$$',display:true},{left:'$',right:'$',display:false}]});"></script>
+
+<!-- Tipografía: serif refinada para encabezados, sans humanista para cuerpo, mono para campos -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter+Tight:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --bg:        #f4f1ea;
+    --panel:     #ffffff;
+    --ink:       #1a1a1a;
+    --ink-soft:  #4a4a4a;
+    --line:      #d8d2c3;
+    --accent:    #b8332b;   /* rojo terracota, para puntos críticos y enfásis */
+    --accent-2:  #1f4e3d;   /* verde profundo, para restricción */
+    --accent-3:  #2c5d8a;   /* azul tinta, para gradientes f */
+    --warn:      #c98a1a;
+    --shadow:    0 1px 0 rgba(0,0,0,0.04), 0 8px 24px -12px rgba(0,0,0,0.18);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'Inter Tight',sans-serif;line-height:1.45}
+
+  /* Cabecera */
+  header{
+    border-bottom:1px solid var(--line);
+    padding:28px 36px 22px;
+    background:linear-gradient(180deg,#fbf8f1 0%, var(--bg) 100%);
+  }
+  header h1{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:34px;
+    margin:0 0 4px;
+    letter-spacing:-0.5px;
+  }
+  header h1 em{font-style:italic;color:var(--accent)}
+  header p.sub{
+    margin:0;
+    font-size:13.5px;
+    color:var(--ink-soft);
+    letter-spacing:0.2px;
+  }
+  header p.sub code{
+    font-family:'JetBrains Mono',monospace;
+    font-size:12px;
+    background:#ece6d6;
+    padding:1px 5px;
+    border-radius:3px;
+  }
+
+  /* Layout principal */
+  main{
+    display:grid;
+    grid-template-columns: 360px 1fr;
+    gap:24px;
+    padding:24px 36px 48px;
+  }
+  @media (max-width: 980px){
+    main{grid-template-columns:1fr}
+  }
+
+  /* Panel de entrada */
+  .panel{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:22px 22px 18px;
+    box-shadow:var(--shadow);
+  }
+  .panel h2{
+    font-family:'Cormorant Garamond',serif;
+    font-weight:600;
+    font-size:20px;
+    margin:0 0 14px;
+    padding-bottom:8px;
+    border-bottom:1px solid var(--line);
+    letter-spacing:0.2px;
+  }
+  .field{margin-bottom:14px}
+  .field label{
+    display:block;
+    font-size:12.5px;
+    font-weight:500;
+    color:var(--ink-soft);
+    margin-bottom:5px;
+    letter-spacing:0.3px;
+    text-transform:uppercase;
+  }
+  .field input[type=text], .field input[type=number]{
+    width:100%;
+    border:1px solid var(--line);
+    background:#fbf9f3;
+    padding:8px 10px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:13px;
+    color:var(--ink);
+    border-radius:4px;
+    transition:border-color .15s, background .15s;
+  }
+  .field input:focus{
+    outline:none;
+    border-color:var(--accent);
+    background:#fff;
+  }
+  .domain-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+  }
+  .hint{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    margin-top:6px;
+    font-style:italic;
+  }
+  button.solve{
+    width:100%;
+    margin-top:6px;
+    background:var(--ink);
+    color:#fbf8f1;
+    border:none;
+    padding:11px 14px;
+    font-family:'Inter Tight',sans-serif;
+    font-size:14px;
+    font-weight:500;
+    letter-spacing:1.2px;
+    text-transform:uppercase;
+    cursor:pointer;
+    border-radius:4px;
+    transition:background .15s, transform .05s;
+  }
+  button.solve:hover{background:var(--accent)}
+  button.solve:active{transform:translateY(1px)}
+
+  .preset-row{
+    display:flex;
+    flex-wrap:wrap;
+    gap:6px;
+    margin-top:10px;
+  }
+  .preset{
+    font-size:11px;
+    font-family:'JetBrains Mono',monospace;
+    padding:4px 8px;
+    border:1px solid var(--line);
+    background:#fbf9f3;
+    border-radius:3px;
+    cursor:pointer;
+    color:var(--ink-soft);
+    transition:all .15s;
+  }
+  .preset:hover{border-color:var(--accent);color:var(--accent);background:#fff}
+
+  /* Panel de salida */
+  .output-stack{
+    display:flex;
+    flex-direction:column;
+    gap:24px;
+  }
+  .verdict{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-left:4px solid var(--accent);
+    padding:18px 22px;
+    border-radius:6px;
+    box-shadow:var(--shadow);
+  }
+  .verdict h3{
+    font-family:'Cormorant Garamond',serif;
+    font-size:18px;
+    font-weight:600;
+    margin:0 0 8px;
+    color:var(--ink);
+  }
+  .verdict .answer{
+    font-family:'JetBrains Mono',monospace;
+    font-size:14px;
+    line-height:1.7;
+    color:var(--ink);
+  }
+  .verdict .answer .max{color:var(--accent);font-weight:500}
+  .verdict .answer .min{color:var(--accent-2);font-weight:500}
+  .verdict.empty{border-left-color:var(--line);color:var(--ink-soft)}
+  .verdict.error{border-left-color:var(--warn);background:#fdf6e7}
+  .verdict.error h3{color:var(--warn)}
+
+  /* Tabla de puntos críticos */
+  .table-wrap{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    overflow:hidden;
+    box-shadow:var(--shadow);
+  }
+  .table-wrap h3{
+    font-family:'Cormorant Garamond',serif;
+    font-size:18px;
+    font-weight:600;
+    margin:0;
+    padding:14px 22px 10px;
+    border-bottom:1px solid var(--line);
+  }
+  table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:13px;
+  }
+  thead th{
+    background:#f6f1e4;
+    text-align:left;
+    padding:10px 16px;
+    font-weight:500;
+    font-size:11.5px;
+    text-transform:uppercase;
+    letter-spacing:0.6px;
+    color:var(--ink-soft);
+    border-bottom:1px solid var(--line);
+  }
+  tbody td{
+    padding:10px 16px;
+    border-bottom:1px solid #ece6d6;
+    font-family:'JetBrains Mono',monospace;
+    font-size:12.5px;
+  }
+  tbody tr:last-child td{border-bottom:none}
+  .tag{
+    display:inline-block;
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:10px;
+    font-family:'Inter Tight',sans-serif;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+    font-weight:500;
+  }
+  .tag.max{background:#f8e6e3;color:var(--accent)}
+  .tag.min{background:#dfe8e2;color:var(--accent-2)}
+  .tag.cri{background:#ece6d6;color:var(--ink-soft)}
+
+  /* Gráficos */
+  .plots-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:24px;
+  }
+  @media (max-width:1180px){
+    .plots-grid{grid-template-columns:1fr}
+  }
+  .plot-card{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:6px;
+    overflow:hidden;
+    box-shadow:var(--shadow);
+  }
+  .plot-card h3{
+    font-family:'Cormorant Garamond',serif;
+    font-size:18px;
+    font-weight:600;
+    margin:0;
+    padding:14px 22px 10px;
+    border-bottom:1px solid var(--line);
+  }
+  .plot{
+    width:100%;
+    height:440px;
+  }
+
+  /* Footer */
+  footer{
+    border-top:1px solid var(--line);
+    padding:18px 36px;
+    font-size:11.5px;
+    color:var(--ink-soft);
+    text-align:center;
+    background:#fbf8f1;
+  }
+  footer code{font-family:'JetBrains Mono',monospace}
+
+  /* Detalles ornamentales */
+  .ornament{
+    font-family:'Cormorant Garamond',serif;
+    color:var(--accent);
+    font-size:22px;
+    margin-right:6px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span class="ornament">∇</span>Simulador de los <em>Multiplicadores de Lagrange</em></h1>
+  <p class="sub">
+    Optimización con restricción de igualdad &mdash;
+    Notación admitida: <code>x^2</code>, <code>sin(x)</code>, <code>cos(x)</code>, <code>exp(x)</code>, <code>sqrt(x)</code>, <code>log(x)</code> &middot;
+    Variables: <code>x</code>, <code>y</code>
+  </p>
+</header>
+
+<main>
+
+  <!-- ------------------- PANEL DE ENTRADA ------------------- -->
+  <section class="panel" id="inputPanel">
+    <h2>Definición del problema</h2>
+
+    <div class="field">
+      <label for="fInput">Función objetivo&nbsp;&nbsp;$f(x,y)$</label>
+      <input type="text" id="fInput" value="x*y/2" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field">
+      <label for="gInput">Restricción&nbsp;&nbsp;$g(x,y)=0$</label>
+      <input type="text" id="gInput" value="x + y + sqrt(x^2 + y^2) - 4" autocomplete="off" spellcheck="false">
+      <p class="hint">Escriba solo el lado izquierdo de $g(x,y)=0$.</p>
+    </div>
+
+    <div class="field">
+      <label>Dominio de búsqueda</label>
+      <div class="domain-grid">
+        <input type="number" id="xmin" value="0.05" step="any" placeholder="x mín">
+        <input type="number" id="xmax" value="3" step="any" placeholder="x máx">
+        <input type="number" id="ymin" value="0.05" step="any" placeholder="y mín">
+        <input type="number" id="ymax" value="3" step="any" placeholder="y máx">
+      </div>
+    </div>
+
+    <button class="solve" id="solveBtn">⟨ Calcular ⟩</button>
+
+    <div class="preset-row">
+      <span style="font-size:11.5px;color:var(--ink-soft);width:100%;margin-bottom:2px;letter-spacing:0.3px">Ejemplos:</span>
+      <button class="preset" data-f="x*y/2" data-g="x + y + sqrt(x^2 + y^2) - 4" data-d="0.05,3,0.05,3">Triángulo&nbsp;perímetro&nbsp;4</button>
+      <button class="preset" data-f="9 - x^2 - y^2" data-g="x + y - 3" data-d="-1,4,-1,4">Paraboloide&nbsp;+&nbsp;recta</button>
+      <button class="preset" data-f="x^2 + y^2" data-g="2*x + y - 3" data-d="-2,3,-2,4">Distancia&nbsp;al&nbsp;origen</button>
+      <button class="preset" data-f="x*y" data-g="x^2 + y^2 - 1" data-d="-1.5,1.5,-1.5,1.5">Producto&nbsp;en&nbsp;círculo</button>
+      <button class="preset" data-f="y^2 - 4*x" data-g="x^2 + y^2 - 9" data-d="-4,4,-4,4">Sobre&nbsp;circunferencia</button>
+    </div>
+
+    <div style="margin-top:18px;padding-top:14px;border-top:1px dashed var(--line);font-size:12px;color:var(--ink-soft);line-height:1.5">
+      <strong style="color:var(--ink);font-weight:500">Método.</strong> Se resuelve el sistema
+      $\nabla f = \lambda\,\nabla g,\ g(x,y)=0$
+      vía un esquema híbrido: barrido sobre la curva $g=0$ + refinamiento por Newton multidimensional. Los puntos se clasifican comparando los valores de $f$.
+    </div>
+  </section>
+
+  <!-- ------------------- PANEL DE SALIDA ------------------- -->
+  <section class="output-stack">
+
+    <div class="verdict empty" id="verdict">
+      <h3>Resultado</h3>
+      <div class="answer">Defina $f$, $g$ y el dominio, y presione <strong>Calcular</strong>.</div>
+    </div>
+
+    <div class="table-wrap">
+      <h3>Puntos críticos</h3>
+      <div id="tableContainer">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th><th>$x$</th><th>$y$</th><th>$\lambda$</th><th>$f(x,y)$</th><th>Tipo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody">
+            <tr><td colspan="6" style="color:var(--ink-soft);font-family:'Inter Tight';font-style:italic;text-align:center;padding:18px">— sin puntos calculados —</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="plots-grid">
+      <div class="plot-card">
+        <h3>Superficie 3D &nbsp;<small style="font-family:'Inter Tight';font-size:12px;color:var(--ink-soft);font-weight:400">$z=f(x,y)$ con $g=0$ proyectada</small></h3>
+        <div id="plot3d" class="plot"></div>
+      </div>
+      <div class="plot-card">
+        <h3>Curvas de nivel &nbsp;<small style="font-family:'Inter Tight';font-size:12px;color:var(--ink-soft);font-weight:400">restricción y gradientes en $P^*$</small></h3>
+        <div id="plot2d" class="plot"></div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<footer>
+  Simulador construido para una sesión docente sobre los multiplicadores de Lagrange &middot;
+  parser y derivadas vía <code>math.js</code> &middot; visualización vía <code>Plotly.js</code>
+</footer>
+
+<script>
+/* ===================================================================
+   SIMULADOR DE MULTIPLICADORES DE LAGRANGE
+   -------------------------------------------------------------------
+   Entradas: f(x,y), g(x,y), [xmin,xmax]x[ymin,ymax]
+   Salidas:  puntos críticos (Lagrange), valor extremo, gráficas
+   =================================================================== */
+
+const $ = sel => document.querySelector(sel);
+
+/* ---------- 1. Parseo y derivadas simbólicas ---------- */
+function compileProblem(fStr, gStr){
+  const fNode = math.parse(fStr);
+  const gNode = math.parse(gStr);
+
+  const fxNode = math.derivative(fNode, 'x');
+  const fyNode = math.derivative(fNode, 'y');
+  const gxNode = math.derivative(gNode, 'x');
+  const gyNode = math.derivative(gNode, 'y');
+
+  const f  = fNode.compile();
+  const g  = gNode.compile();
+  const fx = fxNode.compile();
+  const fy = fyNode.compile();
+  const gx = gxNode.compile();
+  const gy = gyNode.compile();
+
+  const evalAt = (compiled, x, y) => compiled.evaluate({x, y});
+
+  return {
+    fStr: fNode.toString(), gStr: gNode.toString(),
+    fxStr: fxNode.toString(), fyStr: fyNode.toString(),
+    gxStr: gxNode.toString(), gyStr: gyNode.toString(),
+    f:  (x,y)=>evalAt(f,x,y),
+    g:  (x,y)=>evalAt(g,x,y),
+    fx: (x,y)=>evalAt(fx,x,y),
+    fy: (x,y)=>evalAt(fy,x,y),
+    gx: (x,y)=>evalAt(gx,x,y),
+    gy: (x,y)=>evalAt(gy,x,y),
+  };
+}
+
+/* ---------- 2. Sistema de Lagrange y Newton ----------
+   Resolvemos F(x,y,lambda) = 0, donde
+       F1 = fx - lambda * gx
+       F2 = fy - lambda * gy
+       F3 = g
+   El jacobiano se aproxima por diferencias finitas centradas.
+---------------------------------------------------------- */
+function lagrangeSystem(P, x, y, lambda){
+  return [
+    P.fx(x,y) - lambda * P.gx(x,y),
+    P.fy(x,y) - lambda * P.gy(x,y),
+    P.g(x,y),
+  ];
+}
+
+function numericJacobian(P, x, y, lam, h){
+  h = h || 1e-6;
+  const f0 = lagrangeSystem(P, x, y, lam);
+  const dx = lagrangeSystem(P, x+h, y, lam);
+  const dy = lagrangeSystem(P, x, y+h, lam);
+  const dl = lagrangeSystem(P, x, y, lam+h);
+  const J = [
+    [(dx[0]-f0[0])/h, (dy[0]-f0[0])/h, (dl[0]-f0[0])/h],
+    [(dx[1]-f0[1])/h, (dy[1]-f0[1])/h, (dl[1]-f0[1])/h],
+    [(dx[2]-f0[2])/h, (dy[2]-f0[2])/h, (dl[2]-f0[2])/h],
+  ];
+  return {J, f0};
+}
+
+// Resolución de J * delta = -f0  (sistema 3x3 por eliminación gaussiana)
+function solve3x3(J, b){
+  const A = J.map((row,i)=>[...row, -b[i]]);
+  for(let i=0;i<3;i++){
+    let piv = i;
+    for(let k=i+1;k<3;k++) if(Math.abs(A[k][i])>Math.abs(A[piv][i])) piv=k;
+    if(Math.abs(A[piv][i]) < 1e-14) return null;  // singular
+    [A[i],A[piv]] = [A[piv],A[i]];
+    for(let k=i+1;k<3;k++){
+      const m = A[k][i]/A[i][i];
+      for(let j=i;j<4;j++) A[k][j] -= m*A[i][j];
+    }
+  }
+  const x = [0,0,0];
+  for(let i=2;i>=0;i--){
+    let s = A[i][3];
+    for(let j=i+1;j<3;j++) s -= A[i][j]*x[j];
+    x[i] = s / A[i][i];
+  }
+  return x;
+}
+
+function newtonRefine(P, x0, y0, lam0, opts){
+  opts = opts || {};
+  const maxIter = opts.maxIter || 60;
+  const tol     = opts.tol || 1e-10;
+  let x=x0, y=y0, lam=lam0;
+  for(let it=0; it<maxIter; it++){
+    const {J, f0} = numericJacobian(P, x, y, lam);
+    const norm = Math.hypot(f0[0], f0[1], f0[2]);
+    if(norm < tol) return {x, y, lambda:lam, residual:norm, converged:true};
+    const delta = solve3x3(J, f0);
+    if(!delta) return {x, y, lambda:lam, residual:norm, converged:false};
+    // step damping para estabilidad
+    let alpha = 1;
+    for(let damp=0; damp<8; damp++){
+      const nx = x + alpha*delta[0];
+      const ny = y + alpha*delta[1];
+      const nl = lam + alpha*delta[2];
+      if([nx,ny,nl].some(v=>!Number.isFinite(v))){alpha*=0.5;continue;}
+      const newNorm = Math.hypot(...lagrangeSystem(P, nx, ny, nl));
+      if(newNorm < norm){
+        x=nx; y=ny; lam=nl; break;
+      }
+      alpha *= 0.5;
+    }
+    if(alpha < 1e-6){
+      const finalNorm = Math.hypot(...lagrangeSystem(P, x, y, lam));
+      return {x, y, lambda:lam, residual:finalNorm, converged:false};
+    }
+  }
+  const finalNorm = Math.hypot(...lagrangeSystem(P, x, y, lam));
+  return {x, y, lambda:lam, residual:finalNorm, converged:finalNorm<1e-6};
+}
+
+/* ---------- 3. Búsqueda de semillas sobre g(x,y)=0 ----------
+   Estrategia: barrido por columnas. En cada x_i muestreamos g en y_j
+   y detectamos cambios de signo => raíz en y por bisección. Sobre
+   cada raíz (x_i, y*) calculamos un lambda inicial razonable a partir
+   de la ecuación más estable y aplicamos Newton al sistema completo.
+-------------------------------------------------------------- */
+function initialLambda(P, x, y){
+  // Estimamos lambda comparando proyecciones de grad f sobre grad g
+  const gxv = P.gx(x,y), gyv = P.gy(x,y);
+  const denom = gxv*gxv + gyv*gyv;
+  if(denom < 1e-12) return 0;
+  return (P.fx(x,y)*gxv + P.fy(x,y)*gyv) / denom;
+}
+
+function findSeedsOnConstraint(P, dom, nx=121, ny=121){
+  const seeds = [];
+  const xs = math.range(dom.xmin, dom.xmax, (dom.xmax-dom.xmin)/(nx-1), true).toArray();
+  const ys = math.range(dom.ymin, dom.ymax, (dom.ymax-dom.ymin)/(ny-1), true).toArray();
+  for(let i=0;i<xs.length;i++){
+    const xi = xs[i];
+    let prevG = null, prevY = null;
+    for(let j=0;j<ys.length;j++){
+      const yj = ys[j];
+      let gv;
+      try { gv = P.g(xi, yj); } catch(e){ gv = NaN; }
+      if(!Number.isFinite(gv)){ prevG=null; prevY=null; continue; }
+      if(prevG !== null && prevG * gv < 0){
+        // bisección en (prevY, yj)
+        let a = prevY, b = yj, ga = prevG, gb = gv;
+        for(let k=0;k<40;k++){
+          const m = 0.5*(a+b);
+          let gm;
+          try { gm = P.g(xi, m); } catch(e){ gm = NaN; }
+          if(!Number.isFinite(gm)) break;
+          if(ga*gm < 0){ b=m; gb=gm; } else { a=m; ga=gm; }
+          if(Math.abs(b-a) < 1e-10) break;
+        }
+        seeds.push({x:xi, y:0.5*(a+b)});
+      }
+      prevG = gv; prevY = yj;
+    }
+  }
+  // También barrido por filas (para curvas casi horizontales)
+  for(let j=0;j<ys.length;j++){
+    const yj = ys[j];
+    let prevG = null, prevX = null;
+    for(let i=0;i<xs.length;i++){
+      const xi = xs[i];
+      let gv;
+      try { gv = P.g(xi, yj); } catch(e){ gv = NaN; }
+      if(!Number.isFinite(gv)){ prevG=null; prevX=null; continue; }
+      if(prevG !== null && prevG * gv < 0){
+        let a = prevX, b = xi, ga = prevG, gb = gv;
+        for(let k=0;k<40;k++){
+          const m = 0.5*(a+b);
+          let gm;
+          try { gm = P.g(m, yj); } catch(e){ gm = NaN; }
+          if(!Number.isFinite(gm)) break;
+          if(ga*gm < 0){ b=m; gb=gm; } else { a=m; ga=gm; }
+          if(Math.abs(b-a) < 1e-10) break;
+        }
+        seeds.push({x:0.5*(a+b), y:yj});
+      }
+      prevG = gv; prevX = xi;
+    }
+  }
+  return seeds;
+}
+
+function dedupSolutions(sols, tol=1e-4){
+  const unique = [];
+  for(const s of sols){
+    if(!Number.isFinite(s.x) || !Number.isFinite(s.y)) continue;
+    const repeated = unique.some(u =>
+      Math.abs(u.x-s.x) < tol && Math.abs(u.y-s.y) < tol
+    );
+    if(!repeated) unique.push(s);
+  }
+  return unique;
+}
+
+function solveLagrange(P, dom){
+  const seeds = findSeedsOnConstraint(P, dom);
+  const solutions = [];
+  for(const s of seeds){
+    // Refinar el punto sobre g=0 ya está hecho; calcular lambda y Newton
+    let lam0;
+    try { lam0 = initialLambda(P, s.x, s.y); } catch(e){ continue; }
+    if(!Number.isFinite(lam0)) lam0 = 0;
+    let sol;
+    try { sol = newtonRefine(P, s.x, s.y, lam0); } catch(e){ continue; }
+    if(!sol.converged) continue;
+    // Verificar que esté en el dominio
+    if(sol.x < dom.xmin - 1e-6 || sol.x > dom.xmax + 1e-6) continue;
+    if(sol.y < dom.ymin - 1e-6 || sol.y > dom.ymax + 1e-6) continue;
+    let fv;
+    try { fv = P.f(sol.x, sol.y); } catch(e){ continue; }
+    if(!Number.isFinite(fv)) continue;
+    solutions.push({x:sol.x, y:sol.y, lambda:sol.lambda, fval:fv, residual:sol.residual});
+  }
+  return dedupSolutions(solutions);
+}
+
+/* ---------- 4. Clasificación max/min (comparativa) ---------- */
+function classify(solutions){
+  if(solutions.length === 0) return solutions;
+  let fmax = -Infinity, fmin = Infinity;
+  for(const s of solutions){
+    if(s.fval > fmax) fmax = s.fval;
+    if(s.fval < fmin) fmin = s.fval;
+  }
+  const tol = 1e-6 * Math.max(1, Math.abs(fmax-fmin));
+  return solutions.map(s => {
+    let type = 'crítico';
+    if(solutions.length === 1){
+      type = 'extremo';   // único candidato
+    } else if(Math.abs(s.fval - fmax) < tol){
+      type = 'máximo';
+    } else if(Math.abs(s.fval - fmin) < tol){
+      type = 'mínimo';
+    } else {
+      type = 'intermedio';
+    }
+    return {...s, type};
+  });
+}
+
+/* ---------- 5. Construcción de la curva g=0 para graficar ----------
+   Marching squares simple sobre la malla de g. Devuelve segmentos
+   {x:[..], y:[..]} que pueden conectarse en arrays separados por null
+   para Plotly.
+------------------------------------------------------------------- */
+function buildConstraintCurve(P, dom, n=180){
+  const xs = [], ys = [];
+  const step = (dom.xmax-dom.xmin)/(n-1);
+  const stepY = (dom.ymax-dom.ymin)/(n-1);
+  const X = Array.from({length:n}, (_,i)=>dom.xmin + i*step);
+  const Y = Array.from({length:n}, (_,i)=>dom.ymin + i*stepY);
+  const G = [];
+  for(let j=0;j<n;j++){
+    G.push([]);
+    for(let i=0;i<n;i++){
+      let v;
+      try { v = P.g(X[i], Y[j]); } catch(e){ v = NaN; }
+      G[j].push(v);
+    }
+  }
+  // helper: interpolar entre dos puntos donde g cambia de signo
+  const interp = (xa, ya, va, xb, yb, vb) => {
+    const t = va/(va - vb);
+    return [xa + t*(xb-xa), ya + t*(yb-ya)];
+  };
+  for(let j=0;j<n-1;j++){
+    for(let i=0;i<n-1;i++){
+      const v00 = G[j][i], v10 = G[j][i+1], v01 = G[j+1][i], v11 = G[j+1][i+1];
+      if([v00,v10,v01,v11].some(v=>!Number.isFinite(v))) continue;
+      // Lados de la celda: bottom (00-10), right (10-11), top (01-11), left (00-01)
+      const segs = [];
+      if(v00*v10 < 0) segs.push(interp(X[i],Y[j],v00,X[i+1],Y[j],v10));
+      if(v10*v11 < 0) segs.push(interp(X[i+1],Y[j],v10,X[i+1],Y[j+1],v11));
+      if(v01*v11 < 0) segs.push(interp(X[i],Y[j+1],v01,X[i+1],Y[j+1],v11));
+      if(v00*v01 < 0) segs.push(interp(X[i],Y[j],v00,X[i],Y[j+1],v01));
+      if(segs.length === 2){
+        xs.push(segs[0][0], segs[1][0], null);
+        ys.push(segs[0][1], segs[1][1], null);
+      } else if(segs.length === 4){
+        xs.push(segs[0][0], segs[1][0], null, segs[2][0], segs[3][0], null);
+        ys.push(segs[0][1], segs[1][1], null, segs[2][1], segs[3][1], null);
+      }
+    }
+  }
+  return {x:xs, y:ys};
+}
+
+/* ---------- 6. Generación de mallas para la superficie y curvas de nivel ---------- */
+function buildSurface(P, dom, n=60){
+  const xs = [], ys = [], zs = [];
+  const stepX = (dom.xmax-dom.xmin)/(n-1);
+  const stepY = (dom.ymax-dom.ymin)/(n-1);
+  for(let i=0;i<n;i++) xs.push(dom.xmin + i*stepX);
+  for(let j=0;j<n;j++) ys.push(dom.ymin + j*stepY);
+  for(let j=0;j<n;j++){
+    const row = [];
+    for(let i=0;i<n;i++){
+      let v;
+      try { v = P.f(xs[i], ys[j]); } catch(e){ v = NaN; }
+      row.push(Number.isFinite(v) ? v : null);
+    }
+    zs.push(row);
+  }
+  return {x:xs, y:ys, z:zs};
+}
+
+/* ---------- 7. Pintado ---------- */
+function renderPlots(P, dom, solutions){
+  // ----- Superficie 3D -----
+  const surf = buildSurface(P, dom, 60);
+  const traces3d = [{
+    type:'surface',
+    x: surf.x, y: surf.y, z: surf.z,
+    colorscale: [
+      [0.0, '#f4ede0'], [0.25, '#e6c89a'], [0.5, '#c98a5e'],
+      [0.75, '#8a3a2c'], [1.0, '#3a1612']
+    ],
+    showscale: false,
+    opacity: 0.92,
+    contours: { z: { show:true, usecolormap:true, project:{z:true} } },
+    name: 'f(x,y)',
+    hovertemplate:'x=%{x:.3f}<br>y=%{y:.3f}<br>f=%{z:.4f}<extra></extra>'
+  }];
+  // Restricción proyectada en 3D: (x, y, f(x,y)) sobre g=0
+  const curve = buildConstraintCurve(P, dom, 200);
+  const zCurve = curve.x.map((xv,i)=>{
+    const yv = curve.y[i];
+    if(xv===null || yv===null) return null;
+    try { const v = P.f(xv,yv); return Number.isFinite(v)?v:null; } catch(e){ return null; }
+  });
+  traces3d.push({
+    type:'scatter3d', mode:'lines',
+    x: curve.x, y: curve.y, z: zCurve,
+    line:{color:'#1f4e3d', width:6},
+    name:'g(x,y)=0 sobre f',
+    hovertemplate:'g=0<br>x=%{x:.3f}, y=%{y:.3f}, f=%{z:.4f}<extra></extra>'
+  });
+  // Puntos críticos en 3D
+  if(solutions.length){
+    traces3d.push({
+      type:'scatter3d', mode:'markers',
+      x: solutions.map(s=>s.x),
+      y: solutions.map(s=>s.y),
+      z: solutions.map(s=>s.fval),
+      marker:{
+        size:7,
+        color: solutions.map(s=>{
+          if(s.type==='máximo' || s.type==='extremo') return '#b8332b';
+          if(s.type==='mínimo') return '#1f4e3d';
+          return '#2c5d8a';
+        }),
+        line:{color:'#1a1a1a', width:1}
+      },
+      text: solutions.map(s=>s.type),
+      hovertemplate:'%{text}<br>x=%{x:.4f}, y=%{y:.4f}, f=%{z:.4f}<extra></extra>',
+      name:'P*'
+    });
+  }
+  Plotly.newPlot('plot3d', traces3d, {
+    margin:{l:0,r:0,t:8,b:0},
+    paper_bgcolor:'#ffffff',
+    scene:{
+      xaxis:{title:'x', backgroundcolor:'#fbf8f1', gridcolor:'#e3dccb'},
+      yaxis:{title:'y', backgroundcolor:'#fbf8f1', gridcolor:'#e3dccb'},
+      zaxis:{title:'f(x,y)', backgroundcolor:'#fbf8f1', gridcolor:'#e3dccb'},
+      camera:{eye:{x:1.6, y:-1.8, z:1.1}}
+    },
+    showlegend:true,
+    legend:{x:0.02, y:0.98, bgcolor:'rgba(255,255,255,0.7)', font:{size:11}}
+  }, {responsive:true, displaylogo:false});
+
+  // ----- Curvas de nivel 2D -----
+  const traces2d = [{
+    type:'contour',
+    x: surf.x, y: surf.y, z: surf.z,
+    colorscale: [
+      [0.0, '#f4ede0'], [0.5, '#c98a5e'], [1.0, '#3a1612']
+    ],
+    contours:{coloring:'lines', showlabels:true, labelfont:{size:10, color:'#1a1a1a'}},
+    line:{width:1.2},
+    showscale:false,
+    name:'curvas de nivel f',
+    hovertemplate:'x=%{x:.3f}<br>y=%{y:.3f}<br>f=%{z:.4f}<extra></extra>'
+  }, {
+    type:'scatter', mode:'lines',
+    x: curve.x, y: curve.y,
+    line:{color:'#1f4e3d', width:2.5},
+    name:'g(x,y)=0',
+    hovertemplate:'g=0<extra></extra>'
+  }];
+  // Vectores gradiente en los puntos críticos
+  const arrowAnnotations = [];
+  for(const s of solutions){
+    let fxv, fyv, gxv, gyv;
+    try {
+      fxv = P.fx(s.x, s.y); fyv = P.fy(s.x, s.y);
+      gxv = P.gx(s.x, s.y); gyv = P.gy(s.x, s.y);
+    } catch(e){ continue; }
+    if(![fxv,fyv,gxv,gyv].every(Number.isFinite)) continue;
+    const span = Math.min(dom.xmax-dom.xmin, dom.ymax-dom.ymin);
+    const target = span * 0.15;
+    const nf = Math.hypot(fxv,fyv) || 1;
+    const ng = Math.hypot(gxv,gyv) || 1;
+    const k = 0.6;  // escala visual
+    const efx = (fxv/nf) * target * k;
+    const efy = (fyv/nf) * target * k;
+    const egx = (gxv/ng) * target;
+    const egy = (gyv/ng) * target;
+    // ∇f en azul
+    arrowAnnotations.push({
+      ax: s.x, ay: s.y, axref:'x', ayref:'y',
+      x: s.x + efx, y: s.y + efy, xref:'x', yref:'y',
+      showarrow:true, arrowhead:3, arrowsize:1, arrowwidth:2,
+      arrowcolor:'#2c5d8a'
+    });
+    // ∇g en verde
+    arrowAnnotations.push({
+      ax: s.x, ay: s.y, axref:'x', ayref:'y',
+      x: s.x + egx, y: s.y + egy, xref:'x', yref:'y',
+      showarrow:true, arrowhead:3, arrowsize:1, arrowwidth:2,
+      arrowcolor:'#1f4e3d'
+    });
+  }
+  if(solutions.length){
+    traces2d.push({
+      type:'scatter', mode:'markers+text',
+      x: solutions.map(s=>s.x), y: solutions.map(s=>s.y),
+      marker:{
+        size:11,
+        color: solutions.map(s=>{
+          if(s.type==='máximo' || s.type==='extremo') return '#b8332b';
+          if(s.type==='mínimo') return '#1f4e3d';
+          return '#2c5d8a';
+        }),
+        line:{color:'#1a1a1a', width:1.5}
+      },
+      text: solutions.map((s,i)=>'P'+(i+1)),
+      textposition:'top right',
+      textfont:{family:'JetBrains Mono', size:11, color:'#1a1a1a'},
+      name:'puntos críticos',
+      hovertemplate:'%{text}<br>x=%{x:.4f}, y=%{y:.4f}<extra></extra>'
+    });
+  }
+  Plotly.newPlot('plot2d', traces2d, {
+    margin:{l:48,r:18,t:8,b:42},
+    paper_bgcolor:'#ffffff',
+    plot_bgcolor:'#fbf8f1',
+    xaxis:{title:'x', range:[dom.xmin,dom.xmax], gridcolor:'#e3dccb', zerolinecolor:'#c9c2b0'},
+    yaxis:{title:'y', range:[dom.ymin,dom.ymax], gridcolor:'#e3dccb', zerolinecolor:'#c9c2b0', scaleanchor:false},
+    annotations: arrowAnnotations,
+    showlegend:true,
+    legend:{x:0.02, y:0.98, bgcolor:'rgba(255,255,255,0.7)', font:{size:11}}
+  }, {responsive:true, displaylogo:false});
+}
+
+/* ---------- 8. Pintado de la tabla y veredicto ---------- */
+function renderTable(solutions){
+  const tbody = $('#tbody');
+  if(solutions.length === 0){
+    tbody.innerHTML = '<tr><td colspan="6" style="color:var(--ink-soft);font-family:Inter Tight;font-style:italic;text-align:center;padding:18px">— no se encontraron puntos críticos en el dominio —</td></tr>';
+    return;
+  }
+  const fmt = v => {
+    if(!Number.isFinite(v)) return '—';
+    const abs = Math.abs(v);
+    if(abs > 1e4 || (abs < 1e-3 && abs > 0)) return v.toExponential(4);
+    return v.toFixed(5);
+  };
+  tbody.innerHTML = solutions.map((s,i)=>{
+    let tagClass = 'cri';
+    if(s.type==='máximo' || s.type==='extremo') tagClass='max';
+    else if(s.type==='mínimo') tagClass='min';
+    return `<tr>
+      <td>P${i+1}</td>
+      <td>${fmt(s.x)}</td>
+      <td>${fmt(s.y)}</td>
+      <td>${fmt(s.lambda)}</td>
+      <td>${fmt(s.fval)}</td>
+      <td><span class="tag ${tagClass}">${s.type}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderVerdict(solutions, P){
+  const v = $('#verdict');
+  v.classList.remove('empty','error');
+  if(solutions.length === 0){
+    v.classList.add('empty');
+    v.innerHTML = '<h3>Resultado</h3><div class="answer">No se hallaron puntos críticos en el dominio. Pruebe ampliar el dominio o revisar la restricción.</div>';
+    return;
+  }
+  const maxima = solutions.filter(s=>s.type==='máximo' || (solutions.length===1 && s.type==='extremo'));
+  const minima = solutions.filter(s=>s.type==='mínimo');
+  let html = '<h3>Resultado</h3><div class="answer">';
+  const fmt = v => {
+    const abs = Math.abs(v);
+    if(abs > 1e4 || (abs < 1e-3 && abs > 0)) return v.toExponential(5);
+    return v.toFixed(6).replace(/0+$/,'').replace(/\.$/,'');
+  };
+  if(maxima.length){
+    const m = maxima[0];
+    html += `<span class="max">Máximo restringido:</span>&nbsp;&nbsp;<strong>f(${fmt(m.x)}, ${fmt(m.y)}) = ${fmt(m.fval)}</strong><br>`;
+  }
+  if(minima.length){
+    const m = minima[0];
+    html += `<span class="min">Mínimo restringido:</span>&nbsp;&nbsp;<strong>f(${fmt(m.x)}, ${fmt(m.y)}) = ${fmt(m.fval)}</strong><br>`;
+  }
+  if(solutions.length === 1 && solutions[0].type === 'extremo'){
+    html += `<small style="color:var(--ink-soft)">Único candidato encontrado: la clasificación máx/mín depende de la naturaleza global del problema (compárese con valores de $f$ en otros puntos admisibles).</small>`;
+  }
+  html += '</div>';
+  v.innerHTML = html;
+}
+
+function renderError(msg){
+  const v = $('#verdict');
+  v.classList.remove('empty');
+  v.classList.add('error');
+  v.innerHTML = `<h3>Error</h3><div class="answer">${msg}</div>`;
+}
+
+/* ---------- 9. Orquestación ---------- */
+function run(){
+  const fStr = $('#fInput').value.trim();
+  const gStr = $('#gInput').value.trim();
+  const dom = {
+    xmin: parseFloat($('#xmin').value),
+    xmax: parseFloat($('#xmax').value),
+    ymin: parseFloat($('#ymin').value),
+    ymax: parseFloat($('#ymax').value),
+  };
+  if(!fStr || !gStr){ renderError('Ingrese f(x,y) y g(x,y).'); return; }
+  if(![dom.xmin,dom.xmax,dom.ymin,dom.ymax].every(Number.isFinite) ||
+     dom.xmax<=dom.xmin || dom.ymax<=dom.ymin){
+    renderError('Dominio inválido: revise los rangos.');
+    return;
+  }
+  let P;
+  try { P = compileProblem(fStr, gStr); }
+  catch(e){ renderError('Error al parsear: '+e.message); return; }
+
+  let solutions;
+  try { solutions = solveLagrange(P, dom); }
+  catch(e){ renderError('Error en la resolución: '+e.message); return; }
+
+  solutions = classify(solutions);
+  solutions.sort((a,b)=>b.fval - a.fval);  // mayor f primero
+
+  renderVerdict(solutions, P);
+  renderTable(solutions);
+  renderPlots(P, dom, solutions);
+}
+
+/* ---------- 10. Eventos ---------- */
+$('#solveBtn').addEventListener('click', run);
+[ 'fInput','gInput','xmin','xmax','ymin','ymax' ].forEach(id=>{
+  $('#'+id).addEventListener('keydown', e=>{
+    if(e.key === 'Enter') run();
+  });
+});
+
+document.querySelectorAll('.preset').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    $('#fInput').value = btn.dataset.f;
+    $('#gInput').value = btn.dataset.g;
+    const [a,b,c,d] = btn.dataset.d.split(',');
+    $('#xmin').value=a; $('#xmax').value=b; $('#ymin').value=c; $('#ymax').value=d;
+    run();
+  });
+});
+
+// Ejecutar el ejemplo de carga inicial automáticamente
+window.addEventListener('load', ()=>setTimeout(run, 200));
+</script>
+
+</body>
+</html>
